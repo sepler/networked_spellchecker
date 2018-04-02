@@ -11,22 +11,38 @@ typedef struct dictionary {
     char** words;
 } dictionary;
 
-void read_file(char*);
+dictionary create_dict(const char*);
 int spellcheck(dictionary, const char*);
 void to_lower(char*);
 
 int main(int argc, char* argv[]) {
-    FILE* fp;
+    dictionary dict;
     if (argc == 2) {
-        if ((fp = fopen(argv[1], "r")) == NULL) {
-            printf("could not read supplied file\n");
-            return 1;
-        }
+        dict = create_dict(argv[1]);
     } else {
-        if ((fp = fopen(DEFUALT_DIRECTORY, "r")) == NULL) {
-            printf("could not read supplied file\n");
-            return 1;
-        }
+        dict = create_dict(DEFUALT_DIRECTORY);
+    }
+
+    if (dict.size == 0) {
+        printf("Could not build dictionary!\n");
+        return 1;
+    }
+
+    const char* test[] = { "who", "oranges", "youth's", "a", "études", "notindiciontary" };
+    int i;
+    for (i = 0; i < 6; i++) {
+        printf("%s\t%d\n", test[i], spellcheck(dict, test[i]));
+    }
+
+}
+
+dictionary create_dict(const char* path) {
+    FILE* fp;
+    dictionary dict;
+    dict.size = 0;
+    if ((fp = fopen(path, "r")) == NULL) {
+        printf("could not read supplied file\n");
+        return dict;
     }
     // Get # of dict entries
     char ch;
@@ -38,7 +54,6 @@ int main(int argc, char* argv[]) {
     } while (ch != EOF);
     rewind(fp);
 
-    dictionary dict;
     dict.size = lines;
     dict.words = malloc(lines * sizeof(char*));
     int i;
@@ -51,15 +66,7 @@ int main(int argc, char* argv[]) {
         }
         to_lower(dict.words[i]);
     }
-    /*for (i = 0; i < dict.size; i++) {
-        printf("%s\n", dict.words[i]);
-    }*/
-
-    const char* test[] = { "who", "oranges", "youth's", "a", "études", "notindiciontary" };
-    for (i = 0; i < 6; i++) {
-        printf("%s\t%d\n", test[i], spellcheck(dict, test[i]));
-    }
-
+    return dict;
 }
 
 int spellcheck(dictionary dict, const char* word) {
