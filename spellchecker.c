@@ -3,7 +3,6 @@
 #include <ctype.h>
 #include <string.h>
 
-const char* DEFUALT_DIRECTORY = "words.txt";
 const int WORD_LENGTH = 32;
 
 typedef struct dictionary {
@@ -11,29 +10,11 @@ typedef struct dictionary {
     char** words;
 } dictionary;
 
-dictionary create_dict(const char*);
-int spellcheck(dictionary, const char*);
-void to_lower(char*);
-
-int main(int argc, char* argv[]) {
-    dictionary dict;
-    if (argc == 2) {
-        dict = create_dict(argv[1]);
-    } else {
-        dict = create_dict(DEFUALT_DIRECTORY);
-    }
-
-    if (dict.size == 0) {
-        printf("Could not build dictionary!\n");
-        return 1;
-    }
-
-    const char* test[] = { "who", "oranges", "youth's", "a", "études", "notindiciontary" };
+void to_lower(char* str) {
     int i;
-    for (i = 0; i < 6; i++) {
-        printf("%s\t%d\n", test[i], spellcheck(dict, test[i]));
+    for (i = 0; i < strlen(str); i++) {
+        str[i] = tolower(str[i]);
     }
-
 }
 
 dictionary create_dict(const char* path) {
@@ -79,9 +60,3 @@ int spellcheck(dictionary dict, const char* word) {
     return 0;
 }
 
-void to_lower(char* str) {
-    int i;
-    for (i = 0; i < strlen(str); i++) {
-        str[i] = tolower(str[i]);
-    }
-}
