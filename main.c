@@ -14,7 +14,7 @@
 const char* DEFUALT_DIRECTORY = "words.txt";
 const int DEFAULT_PORT = 3207;
 
-pthread_t tid[NUM_WORKERS];
+pthread_t tid[NUM_WORKERS+1];
 dictionary dict;
 pthread_mutex_t lock_log, lock_socket;
 queue* queue_log;
@@ -22,6 +22,7 @@ queue* queue_socket;
 
 char* num_to_str(int);
 void* worker_func();
+void* logger_func();
 
 int main(int argc, char *argv[]) {
     // arg1 = dict file, arg2 = port
@@ -79,7 +80,11 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    
+    int err = pthread_create(&(tid[NUM_WORKERS]), NULL, &logger_func, NULL);
+    if (err != 0) {
+        printf("cant create logger thread thread: %s", strerror(err));
+        exit(1);
+    }    
 
     listen(socket_desc, 3);
 
@@ -110,8 +115,6 @@ void* worker_func() {
             char buffer[256];
             while ((len = recv(new_socket, buffer, 256, 0)) > 0) {
                 buffer[strcspn(buffer, "\r\n")] = 0;
-                //str_trim(buffer);
-                printf("~%s~\n", buffer);
                 int result = spellcheck(dict, buffer);
                 char message[256];
                 strcpy(message, buffer);
@@ -121,18 +124,25 @@ void* worker_func() {
                     strcat(message, " MISSPELLED\n");
                 }
                 write(new_socket, message, strlen(message));
+                pthread_mutex_lock(&lock_log);
+                push_queue(queue_log, message);
+                pthread_mutex_unlock(&lock_log);
             }
         }
     }
 }
 
-        /*
-        printf("connection accepted\n");
-        char* message = "hello!\n";
-        write(new_socket, message, strlen(message));
-        int len;
-        char buffer[256];
-        while ((len = recv(new_socket, buffer, 256, 0)) > 0) {
-            printf("read from client: %s\n", buffer);
+void* logger_func() {
+    while (1) {
+        while (queue_log->size > 0) {
+            pthread_mutex_lock(&lock_log);
+            char* message = pop_queue(queue_log);
+            pthread_mutex_unlock(&lock_log);
+            printf("%s", message);
+            FILE* fp;
+            fp = fopen("server.log", "a");
+            fputs(message, fp);
+            fclose(fp);
         }
-        */
+    }
+}
