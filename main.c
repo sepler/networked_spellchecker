@@ -7,13 +7,24 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include "spellchecker.h"
+#include "queue.h"
+
+#define NUM_WORKERS 1
 
 const char* DEFUALT_DIRECTORY = "words.txt";
 const int DEFAULT_PORT = 3207;
 
+pthread_t tid[NUM_WORKERS];
+dictionary dict;
+pthread_mutex_t lock_log, lock_socket;
+queue* queue_log;
+queue* queue_socket;
+
+char* num_to_str(int);
+void* worker_func();
+
 int main(int argc, char *argv[]) {
     // arg1 = dict file, arg2 = port
-    dictionary dict;
     if (argc >= 2) {
         dict = create_dict(argv[1]);
     } else {
@@ -48,11 +59,74 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    queue_log = create_queue();
+    queue_socket = create_queue();
+
+    if (pthread_mutex_init(&lock_log, NULL) != 0) {
+        printf("log mutex init failed\n");
+        exit (1);
+    }
+    if (pthread_mutex_init(&lock_socket, NULL) != 0) {
+        printf("socket mutex init failed\n");
+        exit (1);
+    }
+
+    int i;
+    for (i = 0; i < NUM_WORKERS; i++) {
+        int err = pthread_create(&(tid[i]), NULL, &worker_func, NULL);
+        if (err != 0) {
+            printf("cant create thread: %s", strerror(err));
+        }
+    }
+
+    
+
     listen(socket_desc, 3);
 
     printf("accepting connections\n");
     c = sizeof(struct sockaddr_in);
     while ((new_socket = accept(socket_desc, (struct sockaddr*)&client, (socklen_t*)&c))) {
+        pthread_mutex_lock(&lock_socket);
+        push_queue(queue_socket, num_to_str(new_socket));
+        pthread_mutex_unlock(&lock_socket);
+    }
+    
+}
+
+char* num_to_str(int val) {
+    char* result = malloc(256 * sizeof(result));
+    sprintf(result, "%d", val);
+    return result;
+}
+
+void* worker_func() {
+    while (1) {
+        while (queue_socket->size > 0) {
+            pthread_mutex_lock(&lock_socket);
+            char* end;
+            int new_socket = strtol(pop_queue(queue_socket), &end, 10);
+            pthread_mutex_unlock(&lock_socket);
+            int len;
+            char buffer[256];
+            while ((len = recv(new_socket, buffer, 256, 0)) > 0) {
+                buffer[strcspn(buffer, "\r\n")] = 0;
+                //str_trim(buffer);
+                printf("~%s~\n", buffer);
+                int result = spellcheck(dict, buffer);
+                char message[256];
+                strcpy(message, buffer);
+                if (result == 1) {
+                    strcat(message, " OK\n");
+                } else {
+                    strcat(message, " MISSPELLED\n");
+                }
+                write(new_socket, message, strlen(message));
+            }
+        }
+    }
+}
+
+        /*
         printf("connection accepted\n");
         char* message = "hello!\n";
         write(new_socket, message, strlen(message));
@@ -61,6 +135,4 @@ int main(int argc, char *argv[]) {
         while ((len = recv(new_socket, buffer, 256, 0)) > 0) {
             printf("read from client: %s\n", buffer);
         }
-    }
-
-}
+        */
