@@ -1,0 +1,9 @@
+dog
+cat
+animals
+food
+notindict
+horse
+dijkstra
+algorithm
+keyboard
