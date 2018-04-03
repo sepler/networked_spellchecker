@@ -9,7 +9,7 @@
 #include "spellchecker.h"
 #include "queue.h"
 
-#define NUM_WORKERS 1
+#define NUM_WORKERS 2
 
 const char* DEFUALT_DIRECTORY = "words.txt";
 const int DEFAULT_PORT = 3207;
@@ -108,6 +108,10 @@ void* worker_func() {
     while (1) {
         while (queue_socket->size > 0) {
             pthread_mutex_lock(&lock_socket);
+            if (queue_socket->size < 1) {
+                pthread_mutex_unlock(&lock_socket);
+                continue;
+            }
             char* end;
             int new_socket = strtol(pop_queue(queue_socket), &end, 10);
             pthread_mutex_unlock(&lock_socket);
@@ -136,6 +140,10 @@ void* logger_func() {
     while (1) {
         while (queue_log->size > 0) {
             pthread_mutex_lock(&lock_log);
+            if (queue_log->size < 1) {
+                pthread_mutex_unlock(&lock_log);
+                continue;
+            }
             char* message = pop_queue(queue_log);
             pthread_mutex_unlock(&lock_log);
             printf("%s", message);
