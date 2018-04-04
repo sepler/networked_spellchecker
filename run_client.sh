@@ -1,0 +1,1 @@
+python3 client.py -p 3207 -s localhost -f client.txt
