@@ -9,14 +9,15 @@
 #include "spellchecker.h"
 #include "queue.h"
 
-#define NUM_WORKERS 2
+#define NUM_WORKERS 8
 
 const char* DEFUALT_DIRECTORY = "words.txt";
 const int DEFAULT_PORT = 3207;
 
 pthread_t tid[NUM_WORKERS+1];
-dictionary dict;
 pthread_mutex_t lock_log, lock_socket;
+pthread_cond_t cond_log, cond_socket;
+dictionary dict;
 queue* queue_log;
 queue* queue_socket;
 
@@ -91,9 +92,10 @@ int main(int argc, char *argv[]) {
     printf("accepting connections\n");
     c = sizeof(struct sockaddr_in);
     while ((new_socket = accept(socket_desc, (struct sockaddr*)&client, (socklen_t*)&c))) {
-        pthread_mutex_lock(&lock_socket);
+        pthread_mutex_lock(&lock_socket); // Lock socket mutex
         push_queue(queue_socket, num_to_str(new_socket));
-        pthread_mutex_unlock(&lock_socket);
+        pthread_mutex_unlock(&lock_socket); // Unlock socket mutex
+        pthread_cond_signal(&cond_socket); // Signal blocked threads to wakeup
     }
     
 }
@@ -106,51 +108,50 @@ char* num_to_str(int val) {
 
 void* worker_func() {
     while (1) {
-        while (queue_socket->size > 0) {
-            pthread_mutex_lock(&lock_socket);
-            if (queue_socket->size < 1) {
-                pthread_mutex_unlock(&lock_socket);
-                continue;
+        pthread_mutex_lock(&lock_socket); // Lock socket mutex
+        pthread_cond_wait(&cond_socket, &lock_socket); // Unlock socket mutex, wait for condition, then relock
+        if (queue_socket->size < 1) { // Is there still something in queue?
+            pthread_mutex_unlock(&lock_socket); // Empty, release mutex
+            continue;
+        }
+        char* end;
+        int new_socket = strtol(pop_queue(queue_socket), &end, 10);
+        pthread_mutex_unlock(&lock_socket); // Unlock socket mutex
+        int len;
+        char buffer[256];
+        while ((len = recv(new_socket, buffer, 256, 0)) > 0) {
+            buffer[strcspn(buffer, "\r\n")] = 0;
+            int result = spellcheck(dict, buffer);
+            char message[256];
+            strcpy(message, num_to_str(new_socket));
+            strcat(message, " - ");
+            strcat(message, buffer);
+            if (result == 1) {
+                strcat(message, " OK\n");
+            } else {
+                strcat(message, " MISSPELLED\n");
             }
-            char* end;
-            int new_socket = strtol(pop_queue(queue_socket), &end, 10);
-            pthread_mutex_unlock(&lock_socket);
-            int len;
-            char buffer[256];
-            while ((len = recv(new_socket, buffer, 256, 0)) > 0) {
-                buffer[strcspn(buffer, "\r\n")] = 0;
-                int result = spellcheck(dict, buffer);
-                char message[256];
-                strcpy(message, buffer);
-                if (result == 1) {
-                    strcat(message, " OK\n");
-                } else {
-                    strcat(message, " MISSPELLED\n");
-                }
-                write(new_socket, message, strlen(message));
-                pthread_mutex_lock(&lock_log);
-                push_queue(queue_log, message);
-                pthread_mutex_unlock(&lock_log);
-            }
+            write(new_socket, message, strlen(message));
+            pthread_mutex_lock(&lock_log); // Lock log mutex
+            push_queue(queue_log, message);
+            pthread_mutex_unlock(&lock_log); // Unlock log mutex
+            pthread_cond_signal(&cond_log); // Signal blocked threads to wakeup
         }
     }
 }
 
 void* logger_func() {
     while (1) {
+        pthread_mutex_lock(&lock_log); // Lock log mutex
+        pthread_cond_wait(&cond_log, &lock_log); // Unlock log mutex, wait for condition, then relock
         while (queue_log->size > 0) {
-            pthread_mutex_lock(&lock_log);
-            if (queue_log->size < 1) {
-                pthread_mutex_unlock(&lock_log);
-                continue;
-            }
-            char* message = pop_queue(queue_log);
-            pthread_mutex_unlock(&lock_log);
-            printf("%s", message);
             FILE* fp;
             fp = fopen("server.log", "a");
+            char* message = pop_queue(queue_log);
+            printf("%s", message);
             fputs(message, fp);
             fclose(fp);
         }
+        pthread_mutex_unlock(&lock_log); // Unlock socket mutex
     }
 }
