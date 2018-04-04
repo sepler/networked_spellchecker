@@ -51,10 +51,17 @@ dictionary create_dict(const char* path) {
 }
 
 int spellcheck(dictionary dict, const char* word) {
-    int i;
-    for (i = 0; i < dict.size; i++) {
-        if (strcmp(dict.words[i], word) == 0) {
-            return 1;
+    // Basic Binary Search
+    int i = 0, j = dict.size -1;
+    while (i <= j) {
+        int m = (i + j) / 2;
+        int cmp = strcmp(dict.words[m], word);
+        if (cmp == 0) {
+            return m;
+        } else if (cmp < 0) {
+            i = m + 1;
+        } else {
+            j = m - 1;
         }
     }
     return 0;

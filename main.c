@@ -121,12 +121,13 @@ void* worker_func() {
         char buffer[256];
         while ((len = recv(new_socket, buffer, 256, 0)) > 0) {
             buffer[strcspn(buffer, "\r\n")] = 0;
-            int result = spellcheck(dict, buffer);
+            to_lower(buffer); // Make lowercase for spellcheck
             char message[256];
             strcpy(message, num_to_str(new_socket));
             strcat(message, " - ");
             strcat(message, buffer);
-            if (result == 1) {
+            int found = spellcheck(dict, buffer);
+            if (found) {
                 strcat(message, " OK\n");
             } else {
                 strcat(message, " MISSPELLED\n");
